@@ -3,10 +3,24 @@ use std::net::SocketAddr;
 use axum::{
     http::StatusCode,
     response::{Html, IntoResponse},
-    routing::get,
+    routing::{get, post},
     Json, Router, Server,
 };
+use jsonwebtoken as jwt;
 use serde::{Deserialize, Serialize};
+
+const SECRET: &[u8] = b"secret";
+
+#[derive(Debug, Deserialize, Serialize)]
+struct LoginRequest {
+    pub email: String,
+    pub password: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct LoginResponse {
+    pub token: String,
+}
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Todo {
@@ -30,11 +44,18 @@ pub struct CreateTodo {
     pub title: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct Claims {
+    id: usize,
+    name: String,
+}
+
 #[tokio::main]
 async fn main() {
     let app = Router::new()
         .route("/", get(index_handler))
-        .route("/todos", get(todos_handler).post(create_todo_handler));
+        .route("/todos", get(todos_handler).post(create_todo_handler))
+        .route("/login", post(login_handler));
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
 
@@ -60,4 +81,15 @@ async fn todos_handler() -> impl IntoResponse {
 async fn create_todo_handler(Json(todo): Json<CreateTodo>) -> impl IntoResponse {
     println!("{todo:?}");
     StatusCode::CREATED
+}
+
+async fn login_handler(Json(login): Json<LoginRequest>) -> impl IntoResponse {
+    let claims = Claims {
+        id: 1,
+        name: login.email,
+    };
+    let key = jwt::EncodingKey::from_secret(SECRET);
+    let token = jwt::encode(&jwt::Header::default(), &claims, &key).unwrap();
+
+    Json(LoginResponse { token })
 }
