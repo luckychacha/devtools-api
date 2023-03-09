@@ -1,12 +1,17 @@
 use std::net::SocketAddr;
 
 use axum::{
+    async_trait,
+    extract::FromRequest,
+    headers::{authorization::Bearer, Authorization},
     http::StatusCode,
+    request_parts::RequestParts,
     response::{Html, IntoResponse},
     routing::{get, post},
-    Json, Router, Server,
+    Json, Router, Server, TypedHeader,
 };
 use jsonwebtoken as jwt;
+use jwt::Validation;
 use serde::{Deserialize, Serialize};
 
 const SECRET: &[u8] = b"secret";
@@ -92,4 +97,44 @@ async fn login_handler(Json(login): Json<LoginRequest>) -> impl IntoResponse {
     let token = jwt::encode(&jwt::Header::default(), &claims, &key).unwrap();
 
     Json(LoginResponse { token })
+}
+
+// #[async_trait]
+// impl<S, B> FromRequest<S, B> for Claims
+// where
+//     // these bounds are required by `async_trait`
+//     B: Send + 'static,
+//     S: Send + Sync,
+// {
+//     type Rejection = HttpError;
+
+//     async fn from_request(req: &mut RequestParts<B>, state: &S) -> Result<Self, Self::Rejection> {
+//         let TypedHeader(Authorization(bearer)) =
+//             TypedHeader::<Authorization<Bearer>>::from_request(req)
+//                 .await
+//                 .map_err(|_| HttpError::Auth);
+
+//         let key = jwt::DecodingKey::from_secret((SECRET));
+
+//         let token = jwt::decode::<Claims>(bearer.token(), &key, &Validation::default())
+//             .map_err(|_| HttpError::Auth)?;
+
+//         Ok(token.claims)
+//     }
+// }
+
+#[derive(Debug)]
+enum HttpError {
+    Auth,
+    Internal,
+}
+
+impl IntoResponse for HttpError {
+    fn into_response(self) -> axum::response::Response {
+        let (code, msg) = match self {
+            HttpError::Auth => (StatusCode::UNAUTHORIZED, "UNAUTHORIZED"),
+            HttpError::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR"),
+        };
+        (code, msg).into_response()
+    }
 }
