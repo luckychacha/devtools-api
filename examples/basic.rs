@@ -2,10 +2,9 @@ use std::net::SocketAddr;
 
 use axum::{
     async_trait,
-    extract::FromRequest,
+    extract::FromRequestParts,
     headers::{authorization::Bearer, Authorization},
-    http::StatusCode,
-    request_parts::RequestParts,
+    http::{request::Parts, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
     Json, Router, Server, TypedHeader,
@@ -66,10 +65,7 @@ async fn main() {
 
     println!("Listening on http://{addr}");
 
-    Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let _ = Server::bind(&addr).serve(app.into_make_service()).await;
 }
 
 async fn index_handler() -> Html<&'static str> {
@@ -83,7 +79,7 @@ async fn todos_handler() -> impl IntoResponse {
     ])
 }
 
-async fn create_todo_handler(Json(todo): Json<CreateTodo>) -> impl IntoResponse {
+async fn create_todo_handler(_claims: Claims, Json(todo): Json<CreateTodo>) -> impl IntoResponse {
     println!("{todo:?}");
     StatusCode::CREATED
 }
@@ -99,29 +95,27 @@ async fn login_handler(Json(login): Json<LoginRequest>) -> impl IntoResponse {
     Json(LoginResponse { token })
 }
 
-// #[async_trait]
-// impl<S, B> FromRequest<S, B> for Claims
-// where
-//     // these bounds are required by `async_trait`
-//     B: Send + 'static,
-//     S: Send + Sync,
-// {
-//     type Rejection = HttpError;
+#[async_trait]
+impl<S> FromRequestParts<S> for Claims
+where
+    S: Send + Sync,
+{
+    type Rejection = HttpError;
 
-//     async fn from_request(req: &mut RequestParts<B>, state: &S) -> Result<Self, Self::Rejection> {
-//         let TypedHeader(Authorization(bearer)) =
-//             TypedHeader::<Authorization<Bearer>>::from_request(req)
-//                 .await
-//                 .map_err(|_| HttpError::Auth);
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        let TypedHeader(Authorization(token)) =
+            TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
+                .await
+                .map_err(|_| HttpError::Auth)?;
 
-//         let key = jwt::DecodingKey::from_secret((SECRET));
+        let key = jwt::DecodingKey::from_secret(SECRET);
 
-//         let token = jwt::decode::<Claims>(bearer.token(), &key, &Validation::default())
-//             .map_err(|_| HttpError::Auth)?;
+        let token = jwt::decode::<Claims>(token.token(), &key, &Validation::default())
+            .map_err(|_| HttpError::Internal)?;
 
-//         Ok(token.claims)
-//     }
-// }
+        Ok(token.claims)
+    }
+}
 
 #[derive(Debug)]
 enum HttpError {
