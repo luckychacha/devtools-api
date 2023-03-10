@@ -52,6 +52,7 @@ pub struct CreateTodo {
 struct Claims {
     id: usize,
     name: String,
+    exp: usize,
 }
 
 #[tokio::main]
@@ -88,11 +89,20 @@ async fn login_handler(Json(login): Json<LoginRequest>) -> impl IntoResponse {
     let claims = Claims {
         id: 1,
         name: login.email,
+        exp: get_epoch() + 14 * 24 * 60 * 60,
     };
     let key = jwt::EncodingKey::from_secret(SECRET);
     let token = jwt::encode(&jwt::Header::default(), &claims, &key).unwrap();
 
     Json(LoginResponse { token })
+}
+
+fn get_epoch() -> usize {
+    use std::time::SystemTime;
+    SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as usize
 }
 
 #[async_trait]
@@ -103,15 +113,17 @@ where
     type Rejection = HttpError;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let TypedHeader(Authorization(token)) =
+        let TypedHeader(Authorization(bear)) =
             TypedHeader::<Authorization<Bearer>>::from_request_parts(parts, state)
                 .await
                 .map_err(|_| HttpError::Auth)?;
 
         let key = jwt::DecodingKey::from_secret(SECRET);
-
-        let token = jwt::decode::<Claims>(token.token(), &key, &Validation::default())
-            .map_err(|_| HttpError::Internal)?;
+        let token =
+            jwt::decode::<Claims>(bear.token(), &key, &Validation::default()).map_err(|e| {
+                println!("{e:?}");
+                HttpError::Internal
+            })?;
 
         Ok(token.claims)
     }
