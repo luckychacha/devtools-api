@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::http_error::HttpError;
 use jsonwebtoken as jwt;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
     pub id: usize,
     pub name: String,
