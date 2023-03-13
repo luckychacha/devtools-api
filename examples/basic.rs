@@ -72,11 +72,22 @@ async fn todos_handler(Extension(store): Extension<TodoStore>) -> impl IntoRespo
 // 通常，请求的 body 信息是在解析请求时被读取并转换成相应的数据类型，最后传递给业务逻辑处理函数作为参数。因此，Axum 推荐将 body 参数放在函数参数列表的最后面，以方便读取请求的其他参数并进行处理，最后处理 body 参数。如果将 body 参数放在前面，可能会导致其他参数还没有准备好就开始处理 body，进而导致错误。
 
 // 如果 Json(todo): Json<CreateTodo>, 不放在最后一个参数，路由就会报错。
+
+/// 在Axum中，Handler trait 的定义如下：
+/// pub trait Handler<ReqBody>: Clone + Send + Sized + 'static {
+///     type Fut: Future<Output = Response<Body>> + Send + 'static;
+///     fn call(&self, req: Request<ReqBody>) -> Self::Fut;
+///     More methods...
+/// }
+/// 在这个trait中，call方法需要接收一个Request对象，这个对象在定义中的泛型参数为ReqBody，表示这个请求的body的类型。Axum在实现Handler trait的时候使用了Rust的特性推导和impl Trait功能，可以自动推导ReqBody的类型，但是要求在call方法之前必须出现所有的泛型参数，这样才能正确地推导出ReqBody的类型。
+
+///对于函数1和3，它们都满足这个要求，因为在call方法之前，Extension(store)和Json(todo)这两个泛型参数都已经出现了。而对于函数2，Extension(store)和Json(todo)出现在了claims之后，无法正确推导ReqBody的类型，因此不符合Handler trait的trait bound。
+
 async fn create_todo_handler(
-    claims: Claims,
     Extension(store): Extension<TodoStore>,
+    claims: Claims,
     Json(todo): Json<CreateTodo>,
-) -> Result<StatusCode, HttpError> {
+) -> impl IntoResponse {
     match store.items.write() {
         Ok(mut guard) => {
             let todo = Todo {
@@ -85,10 +96,10 @@ async fn create_todo_handler(
                 title: todo.title,
                 completed: false,
             };
-            guard.push(todo);
-            Ok(StatusCode::CREATED)
+            guard.push(todo.clone());
+            Json(Ok(todo))
         }
-        Err(_) => Err(HttpError::Internal),
+        Err(_) => Json(Err(HttpError::Internal)),
     }
 }
 
