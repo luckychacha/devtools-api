@@ -12,7 +12,7 @@ use axum::{
     routing::{get, post},
     Extension, Json, Router, Server,
 };
-use axum_macros::debug_handler;
+// use axum_macros::debug_handler;
 use devtools_api::types::{
     claims::Claims,
     create_todo::CreateTodo,
@@ -30,7 +30,7 @@ static NEXT_ID: AtomicUsize = AtomicUsize::new(0);
 async fn main() {
     let store = TodoStore {
         items: Arc::new(RwLock::new(vec![Todo {
-            id: 0,
+            id: get_next_id(),
             user_id: 0,
             title: "Learn Rust".to_string(),
             completed: false,
@@ -69,7 +69,7 @@ async fn todos_handler(Extension(store): Extension<TodoStore>) -> impl IntoRespo
 }
 
 // `Json<_>` consumes the request body and thus must be the last argument to the handler function
-#[debug_handler]
+// #[debug_handler]
 async fn create_todo_handler(
     claims: Claims,
     Extension(store): Extension<TodoStore>,
